@@ -15,7 +15,7 @@ image = iio.imread(r"C:\Users\Usuario\src\repos\bl-uv-plotter-testimages\T_Main_
 width = image.shape[1]
 height = image.shape[0]
 
-color = Vector((211, 173, 73))
+color = Vector((141, 160, 110))
 max_iterations = 100
 
 #tetrahedron is point inside:
@@ -75,25 +75,23 @@ def solve(v1 : Vector, v2 : Vector, v3 : Vector, v4 : Vector, p : Vector) -> tup
                 if dot >= .9999:
                     root_found = True
                     break
-                
-            t_2 = inverse_lerp(c7, c8, p)
 
             if t_2 > 0 and t_2 < 1:
                 resolutions.append((t_1,t_2))
 
-    max = 0
-    max_index = 0
+    min = 10000
+    min_index = 0
 
     for i in range(len(resolutions)):
         res = resolutions[i]
-        dot = p.dot(lerp(lerp(v1,v2,res[0]),lerp(v3,v4,res[0]),res[1]))
+        length = (p - (lerp(lerp(v1,v2,res[0]),lerp(v3,v4,res[0]),res[1]))).length
 
-        if dot > max:
-            max = dot
-            max_index = i
+        if length < min:
+            min = length
+            min_index = i
 
 
-    return (resolutions[max_index][0],resolutions[max_index][1])
+    return (resolutions[min_index][0],resolutions[min_index][1])
 
     
 
@@ -111,7 +109,23 @@ def inverse_lerp (a : Vector,b: Vector, v : Vector):
     av = v-a
     return av.dot(ab) / ab.dot(ab)
 
+#gamma correction
+def linearVector(a : Vector) -> Vector:
+    #return Vector((linear(a.x),linear(a.y),linear(a.z)))
+    return a
 
+def linear(f : float) -> float:
+    return ((f/255.0)**(1/2.2))*255
+
+def srgbVector(a : Vector) -> Vector:
+    #return Vector((srgb(a.x),srgb(a.y),srgb(a.z)))
+    return a
+
+def srgb(f : float) -> float:
+    return ((f/255.0)**2.2)*255
+
+best_solve = (0.0,0.0)
+best_solve_distance = 100
 
 for y0 in range(height):
     for x0 in range(width):
@@ -129,35 +143,48 @@ for y0 in range(height):
         if len(set([c1,c2,c3,c4])) != 4:
             continue
 
-        v1 = Vector(c1).xyz
-        v2 = Vector(c2).xyz
-        v3 = Vector(c3).xyz
-        v4 = Vector(c4).xyz
+        c_linear = linearVector(color)
 
-        if point_in_tetrahedron(v1,v2,v3,v4,color):
-            print(f"point found inside in {(x0,y0)}")
-            t1 = inverse_lerp(v1,v2,color)
-            t2 = inverse_lerp(v3,v4,color)
+        v1 = linearVector(Vector(c1).xyz)
+        v2 = linearVector(Vector(c2).xyz)
+        v3 = linearVector(Vector(c3).xyz)
+        v4 = linearVector(Vector(c4).xyz)
 
-            print(f"t1: {t1}, t2: {t2}")
+        if point_in_tetrahedron(v1,v2,v3,v4,c_linear):
+            #print(f"point found inside in {(x0,y0)}")
 
+            #bounds check
+            #t1 = inverse_lerp(v1,v2,c_linear)
+            #t2 = inverse_lerp(v3,v4,c_linear)
 
-            if(t1 < 0 or t1 > 1 or t2 < 0 or t2 > 1):
-                continue
+            #if(t1 < 0 or t1 > 1 or t2 < 0 or t2 > 1):
+            #    continue
 
-            values = solve(v1,v2,v3,v4,color)
+            values = solve(v1,v2,v3,v4,c_linear)
+
+            t1 = values[0]
+            t2 = values[1]
+
+            #print((t1,t2))
 
             v5 = v1.lerp(v2,t1)
-            v6 = v3.lerp(v4,t2)
+            v6 = v3.lerp(v4,t1)
+            v7 = v5.lerp(v6,t2)
 
-            t3 = inverse_lerp(v5,v6,color)
+            d = (v7-c_linear).length
 
-            l1 = Vector((y0,x0)).lerp(Vector((y0+1,x0)),t1)
-            l2 = Vector((y0,x0+1)).lerp(Vector((y0+1,x0+1)),t2)
+            if d < best_solve_distance:
+                best_solve_distance = d
 
-            l3 = l1.lerp(l2,t3)
-            v = l3.x/image.shape[1]
-            u = l3.y/image.shape[0]
-            print((u,1-v))
+                l1 = Vector((y0,x0)).lerp(Vector((y0+1,x0)),t1)
+                l2 = Vector((y0,x0+1)).lerp(Vector((y0+1,x0+1)),t1)
+
+                l3 = l1.lerp(l2,t2)
+
+                v = l3.x/image.shape[1] + .5/image.shape[1]
+                u = l3.y/image.shape[0] + .5/image.shape[0]
+
+                best_solve = (u,1-v)
             
-
+print(best_solve)
+print(best_solve_distance)
