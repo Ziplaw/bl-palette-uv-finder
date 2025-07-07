@@ -1,1 +1,0 @@
-tar -a -c -f output.zip *

@@ -7,147 +7,19 @@ bl_info = {
 }
 
 import sys
+import subprocess
+import ensurepip
+ensurepip.bootstrap()
+pybin = sys.executable
+subprocess.check_call([pybin, '-m', 'pip', 'install', 'Pillow'])
+subprocess.check_call([pybin, '-m', 'pip', 'install', 'imageio'])
+
 import imageio.v3 as iio
 import math
 from mathutils import Vector
 
-# import bpy
-# import os
-
-# class BatchExportPropertyGroup(bpy.types.PropertyGroup):
-#     filepath : bpy.props.StringProperty(
-#         name="Path",
-#         description="Path to export all models",
-#         default="C:/tmp/",
-#         )
-#     only_selected : bpy.props.BoolProperty(
-#         name="Only Selected",
-#         description="Only export selected models",
-#         default=True,
-#         )
-#     apply_rotations : bpy.props.BoolProperty(
-#         name="Apply Rotation and Scale",
-#         description="Apply Rotation and Scale before exporting",
-#         default=False,
-#         )
-#     move_to_world_center : bpy.props.BoolProperty(
-#         name="Reset Position",
-#         description="Moves each object to 0,0,0 before exporting and back to their original position afterwards",
-#         default=True,
-#         )
-#     export_settings : bpy.props.EnumProperty(
-#         items=
-#         [
-#             ('UNITY', "Unity", "Unity's Export Settings",1),
-#             ('UE5', "Unreal Engine 5", "Unreal Engine 5's Export Settings",2),
-#         ],
-#         name="Export Settings",
-#         description="",
-#         default='UNITY'
-#         )
-        
-        
-#     def draw(self,context):
-#         self.layout.prop(self,"export_settings")
-
-# class BatchExportOperator(bpy.types.Operator):
-#     """Tooltip"""
-#     bl_idname = "object.batch_export_operator"
-#     bl_label = "Batch Export"
-
-#     @classmethod
-#     def poll(cls, context):
-#         return True
-
-#     def execute(self, context):
-#         props = context.scene.BatchExportPropertyGroup
-        
-#         if props.only_selected:
-#             selected_objects = context.selected_objects
-#         else:
-#             selected_objects = bpy.data.objects
-        
-        
-#         for object in selected_objects:
-#             object.select_set(False)
-        
-#         for object in selected_objects:
-#             object.select_set(True)
-            
-#             if props.apply_rotations:
-#                 bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
-                
-#             original_position = object.location
-            
-#             if props.move_to_world_center:
-#                 object.location = 0,0,0
-#                 print(original_position)
-                            
-#             match props.export_settings:
-#                 case 'UNITY':
-#                     bpy.ops.export_scene.fbx(filepath= (f"{props.filepath}/{object.name}.fbx"),use_selection=True,apply_scale_options='FBX_SCALE_ALL',object_types={'MESH'},bake_space_transform=True, apply_unit_scale=True, add_leaf_bones=False, use_armature_deform_only=False, bake_anim=False,axis_forward='-Z', axis_up = 'Y')
-                    
-#                 case 'UE5':
-#                     bpy.ops.export_scene.fbx(filepath= (f"{props.filepath}/{object.name}.fbx"),use_selection=True,apply_scale_options='FBX_SCALE_ALL',object_types={'MESH'},bake_space_transform=True, apply_unit_scale=True, add_leaf_bones=False, use_armature_deform_only=False, bake_anim=False,axis_forward='-Z', axis_up = 'Y')
-                    
-#                 case _:
-#                     raise Exception('Export Settings not Implemented')
-            
-#             if props.move_to_world_center:
-#                 print(original_position)
-#                 object.location = original_position
-        
-#         os.startfile(props.filepath)
-#         return {'FINISHED'}
-
-# class BatchExporter(bpy.types.Panel):
-#     """Creates a Panel for exporting objects in batch."""
-#     bl_label = "Batch Exporter"
-#     bl_idname = "PT_BatchExporter"
-#     bl_space_type = 'VIEW_3D'
-#     bl_region_type = 'UI'
-#     bl_category = 'Batch Export'
-
-#     def draw(self, context):
-#         layout = self.layout
-
-#         props = context.scene.BatchExportPropertyGroup
-
-#         layout.prop(props, "filepath")
-#         layout.prop(props, "only_selected")
-#         layout.prop(props, "apply_rotations")
-#         layout.prop(props, "move_to_world_center")
-#         layout.prop(props, "export_settings")
-        
-#         row = layout.row()
-#         op = row.operator("object.batch_export_operator")
-
-
-# def register():
-#     bpy.utils.register_class(BatchExporter)
-#     bpy.utils.register_class(BatchExportOperator)
-#     bpy.utils.register_class(BatchExportPropertyGroup)
-#     bpy.types.Scene.BatchExportPropertyGroup = bpy.props.PointerProperty(
-#             type=BatchExportPropertyGroup)
-
-
-# def unregister():
-#     bpy.utils.unregister_class(BatchExporter)
-#     bpy.utils.unregister_class(BatchExportOperator)
-#     bpy.utils.unregister_class(BatchExportPropertyGroup)
-#     del bpy.types.Scene.MyPropertyGroup
-
-
-# if __name__ == "__main__":
-#     register()
-
-image = iio.imread(r"C:\Users\Usuario\source\repos\bl-uv-plotter-testimages\T_Main_Color_Palette.png")
-
-width = image.shape[1]
-height = image.shape[0]
-
-color = Vector((141, 160, 110))
-max_iterations = 100
+import bpy
+import os
 
 #tetrahedron is point inside:
 def same_side(v1, v2, v3, v4, p):
@@ -160,13 +32,40 @@ def same_side(v1, v2, v3, v4, p):
 def point_in_tetrahedron(v1 : Vector, v2 : Vector, v3 : Vector, v4 : Vector, p : Vector):
     return same_side(v1, v2, v3, v4, p) and same_side(v2, v3, v4, v1, p) and same_side(v3, v4, v1, v2, p) and same_side(v4, v1, v2, v3, p)
 
-#rudimentary solver
+#lerp
 
+def lerp(a: float, b: float, t: float) -> float:
+    return (1 - t) * a + t * b
+
+def lerp(a: Vector, b: Vector, t: float) -> Vector:
+    return (1.0 - t) * a + t * b
+
+def inverse_lerp (a : Vector,b: Vector, v : Vector):
+    ab = b-a
+    av = v-a
+    return av.dot(ab) / ab.dot(ab)
+
+#gamma correction
+def linearVector(a : Vector) -> Vector:
+    return Vector((linear(a.x),linear(a.y),linear(a.z)))
+
+def linear(f : float) -> float:
+    return ((f)**(1/2.2))
+
+def srgbVector(a : Vector) -> Vector:
+    return Vector((srgb(a.x),srgb(a.y),srgb(a.z)))
+
+def srgb(f : float) -> float:
+    return ((f)**2.2)
+
+
+#rudimentary solver
 def evaluate(v1 : Vector, v2 : Vector, v3 : Vector, v4 : Vector, t_1 : float, t_2 : float) -> Vector:
     return ((1 - t_2) * ((1 - t_1) * v1 + v2 * t_1) + ((1 - t_1) * v3 + v4 * t_1) * t_2)
 
 def solve(v1 : Vector, v2 : Vector, v3 : Vector, v4 : Vector, p : Vector) -> tuple[float,float]:
 
+    max_iterations = 100
     size = 10
     resolutions = []
 
@@ -224,98 +123,166 @@ def solve(v1 : Vector, v2 : Vector, v3 : Vector, v4 : Vector, p : Vector) -> tup
 
     return (resolutions[min_index][0],resolutions[min_index][1])
 
+def find_uv(global_image_path, color_rgb_01) -> (float,float,float) :
     
+    image = iio.imread(global_image_path)
+
+    width = image.shape[1]
+    height = image.shape[0]
+
+    color = Vector((linear(color_rgb_01[0]),linear(color_rgb_01[1]),linear(color_rgb_01[2]))) *255
+    
+    best_solve = (0.0,0.0)
+    best_solve_distance = 10000
+    
+    u = 0
+    v = 0
+
+    for y0 in range(height):
+        for x0 in range(width):
+
+            if x0+1 >= width:
+                continue
+            if y0+1 >= height:
+                break
+
+            c1 = tuple([int(i) for i in image[y0,x0]])
+            c2 = tuple([int(i) for i in image[y0+1,x0]])
+            c3 = tuple([int(i) for i in image[y0,x0+1]])
+            c4 = tuple([int(i) for i in image[y0+1,x0+1]])
+
+            if len(set([c1,c2,c3,c4])) != 4:
+                continue
+
+            c_linear = color
+
+            v1 = Vector(c1).xyz
+            v2 = Vector(c2).xyz
+            v3 = Vector(c3).xyz
+            v4 = Vector(c4).xyz
+
+            if point_in_tetrahedron(v1,v2,v3,v4,c_linear):
+                print(f"point found inside in {(x0,y0)}")
+
+                values = solve(v1,v2,v3,v4,c_linear)
+
+                t1 = values[0]
+                t2 = values[1]
+
+                #print((t1,t2))
+
+                v5 = v1.lerp(v2,t1)
+                v6 = v3.lerp(v4,t1)
+                v7 = v5.lerp(v6,t2)
+
+                d = (v7-c_linear).length
+
+                if d < best_solve_distance:
+                    best_solve_distance = d
+
+                    l1 = Vector((y0,x0)).lerp(Vector((y0+1,x0)),t1)
+                    l2 = Vector((y0,x0+1)).lerp(Vector((y0+1,x0+1)),t1)
+
+                    l3 = l1.lerp(l2,t2)
+
+                    v = l3.x/image.shape[1] + .5/image.shape[1]
+                    u = l3.y/image.shape[0] + .5/image.shape[0]
+
+                    best_solve = (u,1-v)
+    
+    return (u,1-v,best_solve_distance)
 
 
-#lerp
 
-def lerp(a: float, b: float, t: float) -> float:
-    return (1 - t) * a + t * b
+class UVPlotterPropertyGroup(bpy.types.PropertyGroup):
+    img_path : bpy.props.StringProperty(
+        name="Image",
+        description="Image Path",
+        default="",
+        subtype='FILE_PATH'
+        )
+    color : bpy.props.FloatVectorProperty(
+        name="Color",
+        description="Color to find within the texture",
+        default=(0.5,0.5,0.5),
+        subtype='COLOR'
+        )
+    x : bpy.props.FloatProperty(
+        name="X",
+        description="X or U coordinate of UVs",
+        default=0,
+        )
+    y : bpy.props.FloatProperty(
+        name="Y",
+        description="Y or V coordinate of UVs",
+        default=0,
+        )
+    apply_uv_to_selected : bpy.props.BoolProperty(
+        name="Apply UV",
+        description="Apply UV Positions to selected vertices in UV Editing Mode",
+        default=False,
+        )
+        
+        
+    def draw(self,context):
+        self.layout.prop(self,"export_settings")
 
-def lerp(a: Vector, b: Vector, t: float) -> Vector:
-    return (1.0 - t) * a + t * b
+class UVFindOperator(bpy.types.Operator):
+    """Tooltip"""
+    bl_idname = "object.find_uv_operator"
+    bl_label = "Find UV"
 
-def inverse_lerp (a : Vector,b: Vector, v : Vector):
-    ab = b-a
-    av = v-a
-    return av.dot(ab) / ab.dot(ab)
+    @classmethod
+    def poll(cls, context):
+        return bpy.context.area.ui_type == 'UV'
 
-#gamma correction
-def linearVector(a : Vector) -> Vector:
-    #return Vector((linear(a.x),linear(a.y),linear(a.z)))
-    return a
+    def execute(self, context):
+        props = context.scene.UVPlotterPropertyGroup
+        
+        result = find_uv(props.img_path, props.color)
+        print(f"Best Coordinates found for color {props.color}: UV=({result[0]},{result[1]}) with error: {result[2]/255}") 
+        props.x = result[0]
+        props.y = result[1]
+        
+        return {'FINISHED'}
 
-def linear(f : float) -> float:
-    return ((f/255.0)**(1/2.2))*255
+class UVPlotter(bpy.types.Panel):
+    """Creates a Panel for finding UV Coordinates of a color inside a texture"""
+    bl_label = "UV Plotter"
+    bl_idname = "PT_IE_UVPlotter"
+    bl_space_type = 'IMAGE_EDITOR'
+    bl_region_type = 'UI'
+    bl_category = 'UV Plotter'
 
-def srgbVector(a : Vector) -> Vector:
-    #return Vector((srgb(a.x),srgb(a.y),srgb(a.z)))
-    return a
+    def draw(self, context):
+        layout = self.layout
 
-def srgb(f : float) -> float:
-    return ((f/255.0)**2.2)*255
+        props = context.scene.UVPlotterPropertyGroup
 
-best_solve = (0.0,0.0)
-best_solve_distance = 100
+        layout.prop(props, "img_path")
+        layout.prop(props, "color")
+        layout.prop(props, "x")
+        layout.prop(props, "y")
+        layout.prop(props, "apply_uv_to_selected")
+        
+        row = layout.row()
+        op = row.operator("object.find_uv_operator")
 
-for y0 in range(height):
-    for x0 in range(width):
 
-        if x0+1 >= width:
-            continue
-        if y0+1 >= height:
-            break
+def register():    
+    bpy.utils.register_class(UVPlotter)
+    bpy.utils.register_class(UVFindOperator)
+    bpy.utils.register_class(UVPlotterPropertyGroup)
+    bpy.types.Scene.UVPlotterPropertyGroup = bpy.props.PointerProperty(
+            type=UVPlotterPropertyGroup)
 
-        c1 = tuple([int(i) for i in image[y0,x0]])
-        c2 = tuple([int(i) for i in image[y0+1,x0]])
-        c3 = tuple([int(i) for i in image[y0,x0+1]])
-        c4 = tuple([int(i) for i in image[y0+1,x0+1]])
 
-        if len(set([c1,c2,c3,c4])) != 4:
-            continue
+def unregister():
+    bpy.utils.unregister_class(UVPlotter)
+    bpy.utils.unregister_class(UVFindOperator)
+    bpy.utils.unregister_class(UVPlotterPropertyGroup)
+    del bpy.types.Scene.UVPlotterPropertyGroup
 
-        c_linear = linearVector(color)
 
-        v1 = linearVector(Vector(c1).xyz)
-        v2 = linearVector(Vector(c2).xyz)
-        v3 = linearVector(Vector(c3).xyz)
-        v4 = linearVector(Vector(c4).xyz)
-
-        if point_in_tetrahedron(v1,v2,v3,v4,c_linear):
-            #print(f"point found inside in {(x0,y0)}")
-
-            #bounds check
-            #t1 = inverse_lerp(v1,v2,c_linear)
-            #t2 = inverse_lerp(v3,v4,c_linear)
-
-            #if(t1 < 0 or t1 > 1 or t2 < 0 or t2 > 1):
-            #    continue
-
-            values = solve(v1,v2,v3,v4,c_linear)
-
-            t1 = values[0]
-            t2 = values[1]
-
-            #print((t1,t2))
-
-            v5 = v1.lerp(v2,t1)
-            v6 = v3.lerp(v4,t1)
-            v7 = v5.lerp(v6,t2)
-
-            d = (v7-c_linear).length
-
-            if d < best_solve_distance:
-                best_solve_distance = d
-
-                l1 = Vector((y0,x0)).lerp(Vector((y0+1,x0)),t1)
-                l2 = Vector((y0,x0+1)).lerp(Vector((y0+1,x0+1)),t1)
-
-                l3 = l1.lerp(l2,t2)
-
-                v = l3.x/image.shape[1] + .5/image.shape[1]
-                u = l3.y/image.shape[0] + .5/image.shape[0]
-
-                best_solve = (u,1-v)
-            
-print(best_solve)
-print(best_solve_distance)
+if __name__ == "__main__":
+    register()
