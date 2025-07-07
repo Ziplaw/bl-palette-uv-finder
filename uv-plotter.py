@@ -208,12 +208,12 @@ class UVPlotterPropertyGroup(bpy.types.PropertyGroup):
         subtype='COLOR'
         )
     x : bpy.props.FloatProperty(
-        name="X",
+        name="U",
         description="X or U coordinate of UVs",
         default=0,
         )
     y : bpy.props.FloatProperty(
-        name="Y",
+        name="V",
         description="Y or V coordinate of UVs",
         default=0,
         )
@@ -234,16 +234,34 @@ class UVFindOperator(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return bpy.context.area.ui_type == 'UV'
+        props = context.scene.UVPlotterPropertyGroup
+        return bpy.context.area.ui_type == 'UV' and (not props.apply_uv_to_selected or bpy.context.mode == 'EDIT_MESH')
 
     def execute(self, context):
         props = context.scene.UVPlotterPropertyGroup
         
         result = find_uv(props.img_path, props.color)
-        print(f"Best Coordinates found for color {props.color}: UV=({result[0]},{result[1]}) with error: {result[2]/255}") 
+        error = result[2]/255
+        print(f"Best Coordinates found for color {props.color}: UV=({result[0]},{result[1]}) with error: {error}") 
+        
+        if error > .1:
+            props.x = 0
+            props.y = 0
+            raise Exception("Could not find UV coordinates matching color with less than 0.1 error")
+        
         props.x = result[0]
         props.y = result[1]
         
+        bpy.ops.object.editmode_toggle()
+        
+        if props.apply_uv_to_selected:
+            for uv_layer in bpy.context.active_object.data.uv_layers:
+                if uv_layer.active:
+                    for i in range(len(uv_layer.uv)):
+                        if uv_layer.vertex_selection[i].value:
+                            uv_layer.uv[i].vector = Vector((props.x,props.y))
+                            
+        bpy.ops.object.editmode_toggle()
         return {'FINISHED'}
 
 class UVPlotter(bpy.types.Panel):
@@ -261,12 +279,12 @@ class UVPlotter(bpy.types.Panel):
 
         layout.prop(props, "img_path")
         layout.prop(props, "color")
-        layout.prop(props, "x")
-        layout.prop(props, "y")
+        row = layout.row()
+        row.prop(props, "x")
+        row.prop(props, "y")
         layout.prop(props, "apply_uv_to_selected")
         
-        row = layout.row()
-        op = row.operator("object.find_uv_operator")
+        layout.operator("object.find_uv_operator")
 
 
 def register():    
