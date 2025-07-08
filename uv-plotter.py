@@ -2,7 +2,7 @@ bl_info = {
     "name": "UV Plotter",
     "author": "Ziplaw",
     "version": (1, 0),
-    "blender": (3, 6, 14),
+    "blender": (4, 4, 3),
     "description": "UV Plotter Description",
 }
 
