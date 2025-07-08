@@ -205,7 +205,9 @@ class UVPlotterPropertyGroup(bpy.types.PropertyGroup):
         name="Color",
         description="Color to find within the texture",
         default=(0.5,0.5,0.5),
-        subtype='COLOR'
+        subtype='COLOR',
+        min=0,
+        max=1,
         )
     x : bpy.props.FloatProperty(
         name="U",
@@ -221,6 +223,14 @@ class UVPlotterPropertyGroup(bpy.types.PropertyGroup):
         name="Apply UV",
         description="Apply UV Positions to selected vertices in UV Editing Mode",
         default=False,
+        )
+    max_error : bpy.props.FloatProperty(
+        min=0.001,
+        soft_max=.1,
+        name="Maximum Error",
+        description="Maximum difference permitted between target color and obtained color to be considered a match",
+        default=0.05,
+        step=1
         )
         
         
@@ -242,12 +252,13 @@ class UVFindOperator(bpy.types.Operator):
         
         result = find_uv(props.img_path, props.color)
         error = result[2]/255
-        print(f"Best Coordinates found for color {props.color}: UV=({result[0]},{result[1]}) with error: {error}") 
+        self.report({"INFO"},f"Best Coordinates found for color ({props.color[0]:.3f},{props.color[1]:.3f},{props.color[2]:.3f}): UV=({result[0]},{result[1]}) with error: {error:.4f}") 
         
-        if error > .1:
+        if error > props.max_error:
             props.x = 0
             props.y = 0
-            raise Exception("Could not find UV coordinates matching color with less than 0.1 error")
+            self.report({"WARNING"},f"Could not find UV coordinates matching color with less than {props.max_error:.3f} error")
+            return {"CANCELLED"}
         
         props.x = result[0]
         props.y = result[1]
@@ -283,6 +294,7 @@ class UVPlotter(bpy.types.Panel):
         row.prop(props, "x")
         row.prop(props, "y")
         layout.prop(props, "apply_uv_to_selected")
+        layout.prop(props, "max_error")
         
         layout.operator("object.find_uv_operator")
 
