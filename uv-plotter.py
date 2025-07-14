@@ -46,8 +46,9 @@ def inverse_lerp (a : Vector,b: Vector, v : Vector):
     return av.dot(ab) / ab.dot(ab)
 
 #gamma correction
-def linearVector(a : Vector) -> Vector:
-    return Vector((linear(a.x),linear(a.y),linear(a.z)))
+def linearVector(a : Vector) -> Vector:    
+    return a
+    return Vector((linear(abs(a.x)) * math.copysign(1,a.x),linear(abs(a.y)) * math.copysign(1,a.y),linear(abs(a.z)) * math.copysign(1,a.z)))
 
 def linear(f : float) -> float:
     return ((f)**(1/2.2))
@@ -61,7 +62,16 @@ def srgb(f : float) -> float:
 
 #rudimentary solver
 def evaluate(v1 : Vector, v2 : Vector, v3 : Vector, v4 : Vector, t_1 : float, t_2 : float) -> Vector:
-    return ((1 - t_2) * ((1 - t_1) * v1 + v2 * t_1) + ((1 - t_1) * v3 + v4 * t_1) * t_2)
+    a = v1 + t_1 * (v2 - v1)
+    b = v3 + t_1 * (v4 - v3)
+    
+    return a + t_2 * (b - a)
+
+def gradient(v1 : Vector, v2 : Vector, v3 : Vector, v4 : Vector, t_1:float, t_2:float) -> tuple[Vector, Vector]:
+    _t_1 = (v1 - v2 - v3 + v4) * t_2 - v1 + v2
+    _t_2 = (t_1-1)* v1 + v3 - t_1 * (v2 + v3 - v4)
+    
+    return (_t_1,_t_2)
 
 def solve(v1 : Vector, v2 : Vector, v3 : Vector, v4 : Vector, p : Vector) -> tuple[float,float]:
 
@@ -123,7 +133,50 @@ def solve(v1 : Vector, v2 : Vector, v3 : Vector, v4 : Vector, p : Vector) -> tup
 
     return (resolutions[min_index][0],resolutions[min_index][1])
 
-def find_uv(global_image_path, color_rgb_01) -> (float,float,float) :
+
+def solve_with_gradient(v1 : Vector, v2 : Vector, v3 : Vector, v4 : Vector, p : Vector) -> tuple[float,float]:
+    
+    t_1 = 0.5
+    t_2 = 0.5
+    epsilon = .1
+    max_iterations = 100
+        
+    iterator = 0
+    
+    while iterator < max_iterations:
+        
+        move = gradient(v1,v2,v3,v4,t_1, t_2)
+        
+        current = evaluate(v1, v2, v3, v4, t_1, t_2)
+        target = p        
+        
+        moved_t2 = current + move[1] * epsilon
+        moved_t1 = current + move[0] * epsilon
+        moved_t1_negative = current + move[0] * -epsilon
+        moved_t2_negative = current + move[1] * -epsilon
+        
+        current_distance = (target - current).length
+        t1_distance = 10000 if t_1 == 1 else (target - moved_t1).length
+        t2_distance = 10000 if t_2 == 1 else (target - moved_t2).length
+        t1_distance_negative =  10000 if t_1 == 0 else (target - moved_t1_negative).length
+        t2_distance_negative =  10000 if t_2 == 0 else (target - moved_t2_negative).length
+
+        if t1_distance < current_distance and t1_distance < t2_distance and t1_distance < t1_distance_negative and t1_distance < t2_distance_negative:
+            t_1 = min(1, t_1 + epsilon) 
+        elif t2_distance < current_distance and t2_distance < t1_distance and t2_distance < t1_distance_negative and t2_distance < t2_distance_negative:
+            t_2 = min(1, t_2 + epsilon)
+        elif t1_distance_negative < current_distance and t1_distance_negative < t2_distance and t1_distance_negative < t1_distance and t1_distance_negative < t2_distance_negative:
+            t_1 = max(0, t_1 - epsilon)
+        elif t2_distance_negative < current_distance and t2_distance_negative < t2_distance and t2_distance_negative < t1_distance_negative and t2_distance_negative < t1_distance:
+            t_2 = max(0, t_2 - epsilon)
+        else:
+            epsilon *= .9
+
+        iterator+=1
+
+    return(t_1,t_2)
+
+def find_uv(global_image_path, color_rgb_01, constrain_within_bounds) -> (float,float,float) :
     
     image = iio.imread(global_image_path)
 
@@ -150,10 +203,10 @@ def find_uv(global_image_path, color_rgb_01) -> (float,float,float) :
             c2 = tuple([int(i) for i in image[y0+1,x0]])
             c3 = tuple([int(i) for i in image[y0,x0+1]])
             c4 = tuple([int(i) for i in image[y0+1,x0+1]])
-
-            if len(set([c1,c2,c3,c4])) != 4:
+            
+            if len(set([c1,c2,c3,c4])) < 4:
                 continue
-
+            
             c_linear = color
 
             v1 = Vector(c1).xyz
@@ -161,21 +214,30 @@ def find_uv(global_image_path, color_rgb_01) -> (float,float,float) :
             v3 = Vector(c3).xyz
             v4 = Vector(c4).xyz
 
-            if point_in_tetrahedron(v1,v2,v3,v4,c_linear):
-                print(f"point found inside in {(x0,y0)}")
-
-                values = solve(v1,v2,v3,v4,c_linear)
+            if not constrain_within_bounds or point_in_tetrahedron(v1,v2,v3,v4,c_linear):
+                if constrain_within_bounds:
+                    print(f"point found inside in {(x0,y0)}")
+                
+                d = (c_linear-v1).length
+                
+                if d < 1:
+                    print("Found exact color")
+                    
+                    v1_c = Vector((y0,x0))
+                    
+                    v = v1_c.x/image.shape[1] + .5/image.shape[1]
+                    u = v1_c.y/image.shape[0] + .5/image.shape[0]
+                    
+                    best_solve = (u,1-v)
+                    best_solve_distance = d
+                    continue
+                
+                values = solve_with_gradient(v1,v2,v3,v4,c_linear)
 
                 t1 = values[0]
                 t2 = values[1]
 
-                #print((t1,t2))
-
-                v5 = v1.lerp(v2,t1)
-                v6 = v3.lerp(v4,t1)
-                v7 = v5.lerp(v6,t2)
-
-                d = (v7-c_linear).length
+                d = (evaluate(v1,v2,v3,v4,t1,t2)-c_linear).length
 
                 if d < best_solve_distance:
                     best_solve_distance = d
@@ -250,14 +312,14 @@ class UVFindOperator(bpy.types.Operator):
     def execute(self, context):
         props = context.scene.UVPlotterPropertyGroup
         
-        result = find_uv(props.img_path, props.color)
-        error = result[2]/255
+        result = find_uv(bpy.path.abspath(props.img_path), props.color, False)
+        error = result[2]/255.0
         self.report({"INFO"},f"Best Coordinates found for color ({props.color[0]:.3f},{props.color[1]:.3f},{props.color[2]:.3f}): UV=({result[0]},{result[1]}) with error: {error:.4f}") 
         
         if error > props.max_error:
             props.x = 0
             props.y = 0
-            self.report({"WARNING"},f"Could not find UV coordinates matching color with less than {props.max_error:.3f} error")
+            self.report({"WARNING"},f"Could not find UV coordinates matching color with less than {props.max_error:.3f} error (minimum error found: {error})")
             return {"CANCELLED"}
         
         props.x = result[0]
