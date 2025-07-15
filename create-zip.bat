@@ -1,0 +1,1 @@
+tar -a -c -f palette-uv-finder.zip palette-uv-finder/*

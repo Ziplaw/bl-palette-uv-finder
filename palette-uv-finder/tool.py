@@ -1,119 +1,8 @@
-bl_info = {
-    "name": "UV Plotter",
-    "author": "Ziplaw",
-    "version": (1, 0),
-    "blender": (4, 4, 3),
-    "description": "UV Plotter Description",
-}
-
-import sys
-import subprocess
-import ensurepip
-ensurepip.bootstrap()
-pybin = sys.executable
-subprocess.check_call([pybin, '-m', 'pip', 'install', 'Pillow'])
-subprocess.check_call([pybin, '-m', 'pip', 'install', 'imageio'])
-
-import imageio.v3 as iio
-import math
-from mathutils import Vector
-
 import bpy
-import os
+from .vector_math import *
+from .solver import *
 
-#tetrahedron is point inside:
-def same_side(v1, v2, v3, v4, p):
-    
-    normal = (v2 - v1).cross(v3 - v1)
-    dotV4 = (normal).dot(v4 - v1)
-    dotP = (normal).dot(p - v1)
-    return math.copysign(1,dotV4) == math.copysign(1,dotP)
-
-def point_in_tetrahedron(v1 : Vector, v2 : Vector, v3 : Vector, v4 : Vector, p : Vector):
-    return same_side(v1, v2, v3, v4, p) and same_side(v2, v3, v4, v1, p) and same_side(v3, v4, v1, v2, p) and same_side(v4, v1, v2, v3, p)
-
-#lerp
-
-def lerp(a: float, b: float, t: float) -> float:
-    return (1 - t) * a + t * b
-
-def lerp(a: Vector, b: Vector, t: float) -> Vector:
-    return (1.0 - t) * a + t * b
-
-def inverse_lerp (a : Vector,b: Vector, v : Vector):
-    ab = b-a
-    av = v-a
-    return av.dot(ab) / ab.dot(ab)
-
-#gamma correction
-def linearVector(a : Vector) -> Vector:
-    return Vector((linear(abs(a.x)) * math.copysign(1,a.x),linear(abs(a.y)) * math.copysign(1,a.y),linear(abs(a.z)) * math.copysign(1,a.z)))
-
-def linear(f : float) -> float:
-    return ((f)**(1/2.2))
-
-def srgbVector(a : Vector) -> Vector:
-    return Vector((srgb(a.x),srgb(a.y),srgb(a.z)))
-
-def srgb(f : float) -> float:
-    return ((f)**2.2)
-
-#gradient solver
-def evaluate(v1 : Vector, v2 : Vector, v3 : Vector, v4 : Vector, t_1 : float, t_2 : float) -> Vector:
-    a = v1 + t_1 * (v2 - v1)
-    b = v3 + t_1 * (v4 - v3)
-    
-    return a + t_2 * (b - a)
-
-def gradient(v1 : Vector, v2 : Vector, v3 : Vector, v4 : Vector, t_1:float, t_2:float) -> tuple[Vector, Vector]:
-    _t_1 = (v1 - v2 - v3 + v4) * t_2 - v1 + v2
-    _t_2 = (t_1-1)* v1 + v3 - t_1 * (v2 + v3 - v4)
-    
-    return (_t_1,_t_2)
-
-def solve_with_gradient(v1 : Vector, v2 : Vector, v3 : Vector, v4 : Vector, p : Vector) -> tuple[float,float]:
-    
-    t_1 = 0.5
-    t_2 = 0.5
-    epsilon = .1
-    max_iterations = 100
-        
-    iterator = 0
-    
-    while iterator < max_iterations:
-        
-        move = gradient(v1,v2,v3,v4,t_1, t_2)
-        
-        current = evaluate(v1, v2, v3, v4, t_1, t_2)
-        target = p        
-        
-        moved_t2 = current + move[1] * epsilon
-        moved_t1 = current + move[0] * epsilon
-        moved_t1_negative = current + move[0] * -epsilon
-        moved_t2_negative = current + move[1] * -epsilon
-        
-        current_distance = (target - current).length
-        t1_distance = 10000 if t_1 == 1 else (target - moved_t1).length
-        t2_distance = 10000 if t_2 == 1 else (target - moved_t2).length
-        t1_distance_negative =  10000 if t_1 == 0 else (target - moved_t1_negative).length
-        t2_distance_negative =  10000 if t_2 == 0 else (target - moved_t2_negative).length
-
-        if t1_distance < current_distance and t1_distance < t2_distance and t1_distance < t1_distance_negative and t1_distance < t2_distance_negative:
-            t_1 = min(1, t_1 + epsilon) 
-        elif t2_distance < current_distance and t2_distance < t1_distance and t2_distance < t1_distance_negative and t2_distance < t2_distance_negative:
-            t_2 = min(1, t_2 + epsilon)
-        elif t1_distance_negative < current_distance and t1_distance_negative < t2_distance and t1_distance_negative < t1_distance and t1_distance_negative < t2_distance_negative:
-            t_1 = max(0, t_1 - epsilon)
-        elif t2_distance_negative < current_distance and t2_distance_negative < t2_distance and t2_distance_negative < t1_distance_negative and t2_distance_negative < t1_distance:
-            t_2 = max(0, t_2 - epsilon)
-        else:
-            epsilon *= .9
-
-        iterator+=1
-
-    return(t_1,t_2)
-
-def find_uv(global_image_path, color_rgb_01, constrain_within_bounds) -> (float,float,float) :
+def find_uv(global_image_path, color_rgb_01, constrain_within_bounds) -> tuple[float,float,float] :
     
     image = iio.imread(global_image_path)
 
@@ -188,6 +77,7 @@ def find_uv(global_image_path, color_rgb_01, constrain_within_bounds) -> (float,
                     best_solve = (u,1-v)
     
     return (u,1-v,best_solve_distance)
+
 
 
 
@@ -296,20 +186,3 @@ class UVPlotter(bpy.types.Panel):
         layout.operator("object.find_uv_operator")
 
 
-def register():    
-    bpy.utils.register_class(UVPlotter)
-    bpy.utils.register_class(UVFindOperator)
-    bpy.utils.register_class(UVPlotterPropertyGroup)
-    bpy.types.Scene.UVPlotterPropertyGroup = bpy.props.PointerProperty(
-            type=UVPlotterPropertyGroup)
-
-
-def unregister():
-    bpy.utils.unregister_class(UVPlotter)
-    bpy.utils.unregister_class(UVFindOperator)
-    bpy.utils.unregister_class(UVPlotterPropertyGroup)
-    del bpy.types.Scene.UVPlotterPropertyGroup
-
-
-if __name__ == "__main__":
-    register()
