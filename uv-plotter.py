@@ -46,8 +46,7 @@ def inverse_lerp (a : Vector,b: Vector, v : Vector):
     return av.dot(ab) / ab.dot(ab)
 
 #gamma correction
-def linearVector(a : Vector) -> Vector:    
-    return a
+def linearVector(a : Vector) -> Vector:
     return Vector((linear(abs(a.x)) * math.copysign(1,a.x),linear(abs(a.y)) * math.copysign(1,a.y),linear(abs(a.z)) * math.copysign(1,a.z)))
 
 def linear(f : float) -> float:
@@ -59,8 +58,7 @@ def srgbVector(a : Vector) -> Vector:
 def srgb(f : float) -> float:
     return ((f)**2.2)
 
-
-#rudimentary solver
+#gradient solver
 def evaluate(v1 : Vector, v2 : Vector, v3 : Vector, v4 : Vector, t_1 : float, t_2 : float) -> Vector:
     a = v1 + t_1 * (v2 - v1)
     b = v3 + t_1 * (v4 - v3)
@@ -72,67 +70,6 @@ def gradient(v1 : Vector, v2 : Vector, v3 : Vector, v4 : Vector, t_1:float, t_2:
     _t_2 = (t_1-1)* v1 + v3 - t_1 * (v2 + v3 - v4)
     
     return (_t_1,_t_2)
-
-def solve(v1 : Vector, v2 : Vector, v3 : Vector, v4 : Vector, p : Vector) -> tuple[float,float]:
-
-    max_iterations = 100
-    size = 10
-    resolutions = []
-
-    for j in range(size):
-        for i in range(size):
-            t_1 = i/float(size)
-            t_2 = j/float(size)
-            i=0
-            d=.01
-
-            c7 = evaluate(v1, v2, v3, v4, t_1, 0)
-            c8 = evaluate(v1, v2, v3, v4, t_1, 1)
-            s = evaluate(v1, v2, v3, v4, t_1, t_2)
-            
-
-            last_dot = abs((p-s).normalized().dot((c8-c7).normalized()))
-            root_found = False
-
-            while i < max_iterations:
-                t_1 += d
-                    
-                c7 = evaluate(v1, v2, v3, v4, t_1, 0)
-                c8 = evaluate(v1, v2, v3, v4, t_1, 1)
-                
-                s = evaluate(v1, v2, v3, v4, t_1, t_2)
-
-                dot = abs((p - s).normalized().dot((c8 - c7).normalized()))
-                if dot < last_dot:
-                    d *= -.75
-                
-                if t_1 > 1 or t_1 < 0:
-                    d *= -1
-
-                last_dot = dot
-                i+=1
-
-                if dot >= .9999:
-                    root_found = True
-                    break
-
-            if t_2 > 0 and t_2 < 1:
-                resolutions.append((t_1,t_2))
-
-    min = 10000
-    min_index = 0
-
-    for i in range(len(resolutions)):
-        res = resolutions[i]
-        length = (p - (lerp(lerp(v1,v2,res[0]),lerp(v3,v4,res[0]),res[1]))).length
-
-        if length < min:
-            min = length
-            min_index = i
-
-
-    return (resolutions[min_index][0],resolutions[min_index][1])
-
 
 def solve_with_gradient(v1 : Vector, v2 : Vector, v3 : Vector, v4 : Vector, p : Vector) -> tuple[float,float]:
     
@@ -183,7 +120,7 @@ def find_uv(global_image_path, color_rgb_01, constrain_within_bounds) -> (float,
     width = image.shape[1]
     height = image.shape[0]
 
-    color = Vector((linear(color_rgb_01[0]),linear(color_rgb_01[1]),linear(color_rgb_01[2]))) *255
+    color = linearVector(Vector((color_rgb_01[0],color_rgb_01[1],color_rgb_01[2])))*255
     
     best_solve = (0.0,0.0)
     best_solve_distance = 10000
@@ -206,21 +143,19 @@ def find_uv(global_image_path, color_rgb_01, constrain_within_bounds) -> (float,
             
             if len(set([c1,c2,c3,c4])) < 4:
                 continue
-            
-            c_linear = color
 
             v1 = Vector(c1).xyz
             v2 = Vector(c2).xyz
             v3 = Vector(c3).xyz
             v4 = Vector(c4).xyz
 
-            if not constrain_within_bounds or point_in_tetrahedron(v1,v2,v3,v4,c_linear):
+            if not constrain_within_bounds or point_in_tetrahedron(v1,v2,v3,v4,srgbVector(color/255)*255):
                 if constrain_within_bounds:
                     print(f"point found inside in {(x0,y0)}")
+                                
+                d = (color-v1).length
                 
-                d = (c_linear-v1).length
-                
-                if d < 1:
+                if d < 1: # Variation of color in 0-255 is 0
                     print("Found exact color")
                     
                     v1_c = Vector((y0,x0))
@@ -232,12 +167,12 @@ def find_uv(global_image_path, color_rgb_01, constrain_within_bounds) -> (float,
                     best_solve_distance = d
                     continue
                 
-                values = solve_with_gradient(v1,v2,v3,v4,c_linear)
+                values = solve_with_gradient(v1,v2,v3,v4,color)
 
                 t1 = values[0]
                 t2 = values[1]
 
-                d = (evaluate(v1,v2,v3,v4,t1,t2)-c_linear).length
+                d = (evaluate(v1,v2,v3,v4,t1,t2)-color).length
 
                 if d < best_solve_distance:
                     best_solve_distance = d
